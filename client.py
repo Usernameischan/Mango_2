@@ -11,14 +11,17 @@ from torchvision.transforms import Compose, Normalize, ToTensor
 from tqdm import tqdm
 
 
-# #############################################################################
-# 1. Regular PyTorch pipeline: nn.Module, train, test, and DataLoader
-# #############################################################################
+
 
 warnings.filterwarnings("ignore", category=UserWarning)
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-
+'''
+1. 데이터셋을 학습하는 파이프라인 Net 클래스
+1-1. Train, Test 함수를 사용하여, 모델을 학습하고 테스트
+1-2. load data 함수를 사용하여 CIFAR dataset을 로드
+1-3. DataLoader 모듈을 사용하여 배치 데이터 생성
+'''
 class Net(nn.Module):
     """Model (simple CNN adapted from 'PyTorch: A 60 Minute Blitz')"""
 
@@ -73,16 +76,21 @@ def load_data():
     return DataLoader(trainset, batch_size=32, shuffle=True), DataLoader(testset)
 
 
-# #############################################################################
-# 2. Federation of the pipeline with Flower
-# #############################################################################
-
-# Load model and data (simple CNN, CIFAR-10)
 net = Net().to(DEVICE)
 trainloader, testloader = load_data()
 
 
-# Define Flower client
+'''
+2. Flower 라이브러리를 사용하여 Federated learing 작동하도록 구성
+2-1. pytorch모델을 flower 모델로 변환하기 위해 Numpyclient 하위클래스를 상속받는, FlowerClient 클래스 정의
+2-2. FlowerClient 클래스는 get_parameters 메서드와 set_parameters 메서드를 사용하여, pytorch 모델의 가중치를 numpy 배열로 가져오고 설정
+2-3. get_parameters 메서드 : 파이토치로 생성한 모델의 가중치를 numpy 배열로 반환
+    set_parameters 메서드 : get_parameters에서 반환된 numpy 배열로부터 모델 가중치를 로드.
+2-4. fit 메서드 : 모델 가중치를 사용하여 클라이언트에서 모델을 학습, 완료되면 학습된 가중치를 반환
+2-5. evaluate 메서드 : 모델 가중치를 사용하여 클라이언트에서 모델을 평가, 평가 결과를 반환
+
+'''
+
 class FlowerClient(fl.client.NumPyClient):
     def get_parameters(self, config):
         return [val.cpu().numpy() for _, val in net.state_dict().items()]
@@ -103,7 +111,9 @@ class FlowerClient(fl.client.NumPyClient):
         return loss, len(testloader.dataset), {"accuracy": accuracy}
 
 
-# Start Flower client
+'''
+3. 위에서 구현한 FlowerClient 클래스를 사용하여 시작
+'''
 fl.client.start_numpy_client(
     server_address="127.0.0.1:8080",
     client=FlowerClient(),
