@@ -27,17 +27,17 @@ class Net(nn.Module):
 
     def __init__(self) -> None:
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+        self.conv1 = nn.Conv2d(3, 6, 5) # 3 input channels, 6 output channels, kernel size of 5
+        self.pool = nn.MaxPool2d(2, 2) # Maxpooling; kernel size of 2, stride of 2
+        self.conv2 = nn.Conv2d(6, 16, 5) # 6 input channels, 16 output channels, kernel size of 5
+        self.fc1 = nn.Linear(16 * 5 * 5, 120) # 16 * 5 * 5 input features (output of 'self.conv2')
+        self.fc2 = nn.Linear(120, 84) # 120 input features, 84 output features
+        self.fc3 = nn.Linear(84, 10) # 84 input features, 10 output features
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 5 * 5)
+        x = x.view(-1, 16 * 5 * 5) # FCL을 위해서 Flatten; view is similar to numpy's reshape
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         return self.fc3(x)
@@ -45,8 +45,8 @@ class Net(nn.Module):
 
 def train(net, trainloader, epochs):
     """Train the model on the training set."""
-    criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+    criterion = torch.nn.CrossEntropyLoss() # loss function (CrossEntropy) => Multiclass
+    optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9) # Optimizer : momentum SGD
     for _ in range(epochs):
         for images, labels in tqdm(trainloader):
             optimizer.zero_grad()
@@ -68,6 +68,12 @@ def test(net, testloader):
     return loss, accuracy
 
 
+'''
+def load_data 함수
+transofrms.Normalize()는 각 채널별 평균(mean)을 뺀 뒤 표준편차(std)로 나누어 정규화를 진행
+transofrms.Normalize((R채널 평균, G채널 평균, B채널 평균), (R채널 표준편차, G채널 표준편차, B채널 표준편차))
+변환 후 결과는 각 채널별 이미지 픽셀 값을 채널별 평균을 뺀 뒤 표준편차로 나누어 계산 => 이미지의 픽셀 값의 범위가 -1 ~ 1로 변환됨
+'''
 def load_data():
     """Load CIFAR-10 (training and test set)."""
     trf = Compose([ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
@@ -81,7 +87,7 @@ trainloader, testloader = load_data()
 
 
 '''
-2. Flower 라이브러리를 사용하여 Federated learing 작동하도록 구성
+2. Flower 라이브러리를 사용하여 Federated Learning 작동하도록 구성
 2-1. pytorch모델을 flower 모델로 변환하기 위해 Numpyclient 하위클래스를 상속받는, FlowerClient 클래스 정의
 2-2. FlowerClient 클래스는 get_parameters 메서드와 set_parameters 메서드를 사용하여, pytorch 모델의 가중치를 numpy 배열로 가져오고 설정
 2-3. get_parameters 메서드 : 파이토치로 생성한 모델의 가중치를 numpy 배열로 반환
