@@ -2,7 +2,7 @@ from typing import List, Tuple
 
 import flwr as fl
 from flwr.common import Metrics
-
+import pandas as np
 
 '''
 1. Weighted_averate 함수 : n개의 클라이언트 메트릭(accuracy)를 가중평균하여 뱉어주는 함수
@@ -26,15 +26,11 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
 2-3. 서버주소, serverconfig, 전략을 변수로 전달
 2-4. 3회 학습(rounds)을 진행하도록 설정됨q
 '''
-strategy = fl.server.strategy.FedAvg(evaluate_metrics_aggregation_fn=weighted_average,
-                                    min_fit_clients = 5, 
-                                    min_evaluate_clients = 3,
-                                     min_available_clients = 5,
-                                    fraction_fit = 0.3, fraction_evaluate = 0.3)
+strategy = fl.server.strategy.FedAvg(evaluate_metrics_aggregation_fn=weighted_average)
 
 # Start Flower server
 fl.server.start_server(
     server_address="0.0.0.0:8080",
-    config=fl.server.ServerConfig(num_rounds=10),
+    config=fl.server.ServerConfig(num_rounds=15),
     strategy=strategy
 )

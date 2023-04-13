@@ -9,75 +9,96 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR10
 from torchvision.transforms import Compose, Normalize, ToTensor
 from tqdm import tqdm
+import numpy as np
 
+import pandas as pd
+import torch.optim as optim
+import os, sys, math, copy
+os.chdir(r'C:\Users\82102\OneDrive\바탕 화면\찬찬\dataset\CNC\03. Dataset_CNC\dataset\CNC 학습통합데이터_1209')
 
 
 
 warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-'''
-1. 데이터셋을 학습하는 파이프라인 Net 클래스
-1-1. Train, Test 함수를 사용하여, 모델을 학습하고 테스트
-1-2. load data 함수를 사용하여 CIFAR dataset을 로드
-1-3. DataLoader 모듈을 사용하여 배치 데이터 생성
-'''
 class Net(nn.Module):
     """Model (simple CNN adapted from 'PyTorch: A 60 Minute Blitz')"""
 
-    def __init__(self) -> None:
+    def __init__(self, input_dim=48, hidden_dim=20, output_dim=2):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(hidden_dim, output_dim)
+        self.sigmoid = nn.Sigmoid()
+        
+    def forward(self, x):
+        out = self.fc1(x)
+        out = self.relu(out)
+        out = self.fc2(out)
+        out = self.sigmoid(out)
+        return out
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 5 * 5)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
-
-
-def train(net, trainloader, epochs):
+def train(model, X_train_tensor, Y_train_tensor, num_epochs=1000):
     """Train the model on the training set."""
-    criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-    for _ in range(epochs):
-        for images, labels in tqdm(trainloader):
-            optimizer.zero_grad()
-            criterion(net(images.to(DEVICE)), labels.to(DEVICE)).backward()
-            optimizer.step()
+    # 손실함수 정의
+    criterion = nn.BCELoss()
 
+    # 옵티마이저 정의
+    optimizer = optim.SGD(model.parameters(), lr=0.001)
 
-def test(net, testloader):
+    for epoch in range(num_epochs):
+        # Forward
+        outputs = model(X_train_tensor)
+        loss = criterion(outputs, Y_train_tensor)
+        
+        # Backward and optimize
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        
+        # 매 100번째 에포취마다 로그 출력
+        if (epoch+1) % 100 == 0:
+            print('Epoch [{}/{}], Loss: {:.4f}'.format(epoch+1, num_epochs, loss.item()))
+
+def test(model, X_test_tensor, Y_test_tensor):
     """Validate the model on the test set."""
-    criterion = torch.nn.CrossEntropyLoss()
-    correct, loss = 0, 0.0
     with torch.no_grad():
-        for images, labels in tqdm(testloader):
-            outputs = net(images.to(DEVICE))
-            labels = labels.to(DEVICE)
-            loss += criterion(outputs, labels).item()
-            correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
-    accuracy = correct / len(testloader.dataset)
+        outputs = model(X_test_tensor)
+        predicted = (outputs > 0.5).float()
+        accuracy = (predicted == Y_test_tensor).float().mean()
+        loss = nn.BCELoss()(outputs, Y_test_tensor)
     return loss, accuracy
 
+# Function Load CNC DATA
 
 def load_data():
-    """Load CIFAR-10 (training and test set)."""
-    trf = Compose([ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    trainset = CIFAR10("./data", train=True, download=True, transform=trf)
-    testset = CIFAR10("./data", train=False, download=True, transform=trf)
-    return DataLoader(trainset, batch_size=32, shuffle=True), DataLoader(testset)
+    # 데이터 불러오기
+    X_train = pd.read_csv('X_train.csv', header = None, encoding = 'utf-8')
+    X_test = pd.read_csv('X_test.csv', header = None, encoding = 'utf-8')
+    Y_train = pd.read_csv('Y_train.csv', header = None, encoding = 'utf-8')
+    Y_test = pd.read_csv('Y_test.csv', header = None, encoding = 'utf-8')
+
+    # 데이터 변환 함수
+    def data_transform(df):
+        return np.array(df)
+
+    # numpy 배열로 변환
+    X_train_np = data_transform(X_train)
+    X_test_np = data_transform(X_test)
+    Y_train_np = data_transform(Y_train)
+    Y_test_np = data_transform(Y_test)
+
+    # PyTorch 텐서로 변환
+    X_train_tensor = torch.Tensor(X_train_np)
+    X_test_tensor = torch.Tensor(X_test_np)
+    Y_train_tensor = torch.Tensor(Y_train_np)
+    Y_test_tensor = torch.Tensor(Y_test_np)
+    
+    return X_train_tensor, X_test_tensor, Y_train_tensor, Y_test_tensor
 
 
 net = Net().to(DEVICE)
-trainloader, testloader = load_data()
+X_train_tensor, X_test_tensor, Y_train_tensor, Y_test_tensor = load_data()
 
 
 '''
@@ -99,15 +120,15 @@ class FlowerClient(fl.client.NumPyClient):
         state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
         net.load_state_dict(state_dict, strict=True)
 
-    def fit(self, parameters, config):
+    def fit(self, parameters, config, **kwargs):
         self.set_parameters(parameters)
-        train(net, trainloader, epochs=1)
-        return self.get_parameters(config={}), len(trainloader.dataset), {}
+        train(net, X_train_tensor, Y_train_tensor, num_epochs=1)
+        return self.get_parameters(None), len(X_train_tensor), {}
 
-    def evaluate(self, parameters, config):
+    def evaluate(self, parameters, config, **kwargs):
         self.set_parameters(parameters)
-        loss, accuracy = test(net, testloader)
-        return loss, len(testloader.dataset), {"accuracy": accuracy}
+        loss, accuracy = test(net, X_test_tensor, Y_test_tensor)
+        return loss.item(), len(X_test_tensor), {"accuracy": accuracy.item()}
 
 
 '''
