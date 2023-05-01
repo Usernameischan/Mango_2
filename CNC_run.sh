@@ -6,12 +6,12 @@ cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"/
 python -c "from torchvision.datasets import CIFAR10; CIFAR10('./data', download=True)"
 
 echo "Starting server"
-python server_cnc.py &
+python CNC_server.py &
 sleep 3  # Sleep for 3s to give the server enough time to start
 
 for i in `seq 0 1`; do
     echo "Starting client $i"
-    python client2.py $i &
+    python CNC_client.py $i &
 done
 
 # Enable CTRL+C to stop all background processes
