@@ -1,36 +1,90 @@
-from typing import List, Tuple
+import Strategy as stgy
+import pickle
+from utils import ShoppersDataset,load_datasets,save_data
+import time
+from torch import save
 
+from torch.optim import Adam
+from torch.utils.data import DataLoader
 import flwr as fl
-from flwr.common import Metrics
-import pandas as np
 
-'''
-1. Weighted_averate 함수 : n개의 클라이언트 메트릭(accuracy)를 가중평균하여 뱉어주는 함수
-1-1. List[Tuple[int, Metrics]] 형식의 메트릭(accuracy) 리스트를 받아옴 -> "weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:"
-1-2. 위에서 받아온 메트릭(accuracy)와 사용한 데이터 수(num_examples)를 곱하여 리스트를 만든 뒤 -> "accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]"
-1-3. 가중평균을 계산하여 반환 ->    " return {"accuracy": sum(accuracies) / sum(examples)} "
-'''
-def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
-    # Multiply accuracy of each client by number of examples used
-    accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
-    examples = [num_examples for num_examples, _ in metrics]
-
-    # Aggregate and return custom metric (weighted average)
-    return {"accuracy": sum(accuracies) / sum(examples)}
+import argparse
+import json
 
 
-'''
-2. FedAVG 클래스를 이용해 서버의 전략을 정의(*커스터마이징 정의)
-2-1. evaluate_metrics_aggregation_fn 변수로 위에서 정의한 weighted_average 함수를 전략으로 사용
-2-2. fl.server.start_server 함수를 사용해 서버를 실행
-2-3. 서버주소, serverconfig, 전략을 변수로 전달
-2-4. 3회 학습(rounds)을 진행하도록 설정됨q
-'''
-strategy = fl.server.strategy.FedAvg(evaluate_metrics_aggregation_fn=weighted_average)
 
-# Start Flower server
-fl.server.start_server(
-    server_address="0.0.0.0:8080",
-    config=fl.server.ServerConfig(num_rounds=15),
-    strategy=strategy
-)
+
+if __name__ == "__main__":
+    # parser = argparse.ArgumentParser()
+
+    # parser.add_argument("-bs","--batchsize",type=int)
+    # parser.add_argument("-n", "--numclients",type=int)
+    # parser.add_argument("-do","--dataoutput",type=str)
+    # parser.add_argument("-nr","--numrounds",type=int)
+    # parser.add_argument("-f","--trainfile",type=str)
+    
+    
+    # args = parser.parse_args()
+    # NUM_CLIENTS = args.numclients
+    # outfile = args.dataoutput
+    # infile = args.trainfile
+    
+    NUM_CLIENTS = 3
+    outfile = './exports/hbs_result.pt'
+    infile = './data/hbs_dataset.zip'
+    
+    with open('model_definitions.json','r') as f:
+        model_definitions = json.load(f)
+    
+    # number of batches to iterate through
+    NUM_ROUNDS = model_definitions['global']['num_rounds']
+    BATCH_SIZE = model_definitions['global']['batch_size']
+
+    # get data and save
+    DATA = save_data(data_path=infile, batch_size=BATCH_SIZE,outfile=outfile)
+
+
+    lr = model_definitions['global']['lr']
+    input_dim = 0
+    for mdl in model_definitions:
+        if mdl != 'global':
+            input_dim += model_definitions[mdl]['output_dim']
+
+    scheduler_specs = model_definitions['global']['scheduler']
+    
+    # create strategy
+    CustomStrategy = stgy.SplitVFL(
+        num_clients=NUM_CLIENTS, 
+        batch_size=BATCH_SIZE, 
+        dim_input= input_dim, # 6 outputs for three clients
+        num_classes=3, # 추가
+        num_hidden_layers=model_definitions['global']['hidden'],
+        train_labels = DATA['train_labels'],
+        test_labels=DATA['test_labels'],
+        scheduler_specs=scheduler_specs
+    )
+    # start server
+    fl.server.start_server(
+        server_address="0.0.0.0:8080",
+        config=fl.server.ServerConfig(
+            num_rounds=NUM_ROUNDS
+        ),
+        strategy = CustomStrategy
+    )
+    
+    
+
+    # get and save global model for testing purposes.
+    global_model = CustomStrategy.get_model()
+    save(global_model, "./models/global_model.pt")
+    
+    import matplotlib.pyplot as plt 
+
+    fig, axs = plt.subplots(1,2,sharey=True)
+    
+    axs[0].plot(CustomStrategy.train_acc,label='Train Accuracy')
+    axs[1].plot(CustomStrategy.test_acc, label='Test Accuracy')
+    axs[1].plot(CustomStrategy.test_f1,label='Test F1-Score')
+    axs[0].legend()
+    axs[1].legend()
+    plt.show()

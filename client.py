@@ -1,140 +1,205 @@
-import warnings
-from collections import OrderedDict
-
-import flwr as fl
+import flwr as fl 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from torchvision.datasets import CIFAR10
-from torchvision.transforms import Compose, Normalize, ToTensor
 from tqdm import tqdm
 import numpy as np
+from collections import OrderedDict
 
-import pandas as pd
-import torch.optim as optim
-import os, sys, math, copy
-os.chdir(r'C:\Users\82102\OneDrive\바탕 화면\찬찬\dataset\CNC\03. Dataset_CNC\dataset\CNC 학습통합데이터_1209')
+from flwr.common import parameters_to_ndarrays
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+import pickle as pi
+import json
 
-
-warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-class Net(nn.Module):
-    """Model (simple CNN adapted from 'PyTorch: A 60 Minute Blitz')"""
-
-    def __init__(self, input_dim=48, hidden_dim=20, output_dim=2):
-        super(Net, self).__init__()
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(hidden_dim, output_dim)
-        self.sigmoid = nn.Sigmoid()
-        
-    def forward(self, x):
-        out = self.fc1(x)
-        out = self.relu(out)
-        out = self.fc2(out)
-        out = self.sigmoid(out)
-        return out
-
-def train(model, X_train_tensor, Y_train_tensor, num_epochs=1000):
-    """Train the model on the training set."""
-    # 손실함수 정의
-    criterion = nn.BCELoss()
-
-    # 옵티마이저 정의
-    optimizer = optim.SGD(model.parameters(), lr=0.001)
-
-    for epoch in range(num_epochs):
-        # Forward
-        outputs = model(X_train_tensor)
-        loss = criterion(outputs, Y_train_tensor)
-        
-        # Backward and optimize
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        
-        # 매 100번째 에포취마다 로그 출력
-        if (epoch+1) % 100 == 0:
-            print('Epoch [{}/{}], Loss: {:.4f}'.format(epoch+1, num_epochs, loss.item()))
-
-def test(model, X_test_tensor, Y_test_tensor):
-    """Validate the model on the test set."""
-    with torch.no_grad():
-        outputs = model(X_test_tensor)
-        predicted = (outputs > 0.5).float()
-        accuracy = (predicted == Y_test_tensor).float().mean()
-        loss = nn.BCELoss()(outputs, Y_test_tensor)
-    return loss, accuracy
-
-# Function Load CNC DATA
-
-def load_data():
-    # 데이터 불러오기
-    X_train = pd.read_csv('X_train.csv', header = None, encoding = 'utf-8')
-    X_test = pd.read_csv('X_test.csv', header = None, encoding = 'utf-8')
-    Y_train = pd.read_csv('Y_train.csv', header = None, encoding = 'utf-8')
-    Y_test = pd.read_csv('Y_test.csv', header = None, encoding = 'utf-8')
-
-    # 데이터 변환 함수
-    def data_transform(df):
-        return np.array(df)
-
-    # numpy 배열로 변환
-    X_train_np = data_transform(X_train)
-    X_test_np = data_transform(X_test)
-    Y_train_np = data_transform(Y_train)
-    Y_test_np = data_transform(Y_test)
-
-    # PyTorch 텐서로 변환
-    X_train_tensor = torch.Tensor(X_train_np)
-    X_test_tensor = torch.Tensor(X_test_np)
-    Y_train_tensor = torch.Tensor(Y_train_np)
-    Y_test_tensor = torch.Tensor(Y_test_np)
-    
-    return X_train_tensor, X_test_tensor, Y_train_tensor, Y_test_tensor
+import time
 
 
-net = Net().to(DEVICE)
-X_train_tensor, X_test_tensor, Y_train_tensor, Y_test_tensor = load_data()
-
-
-'''
-2. Flower 라이브러리를 사용하여 Federated learing 작동하도록 구성
-2-1. pytorch모델을 flower 모델로 변환하기 위해 Numpyclient 하위클래스를 상속받는, FlowerClient 클래스 정의
-2-2. FlowerClient 클래스는 get_parameters 메서드와 set_parameters 메서드를 사용하여, pytorch 모델의 가중치를 numpy 배열로 가져오고 설정
-2-3. get_parameters 메서드 : 파이토치로 생성한 모델의 가중치를 numpy 배열로 반환
-    set_parameters 메서드 : get_parameters에서 반환된 numpy 배열로부터 모델 가중치를 로드.
-2-4. fit 메서드 : 모델 가중치를 사용하여 클라이언트에서 모델을 학습, 완료되면 학습된 가중치를 반환
-2-5. evaluate 메서드 : 모델 가중치를 사용하여 클라이언트에서 모델을 평가, 평가 결과를 반환
-
-'''
 class FlowerClient(fl.client.NumPyClient):
+    def __init__(self, cid, net, trainloader, testloader, optimizer):
+        """
+        Class that represents a client in Flower.
+
+        Args:
+            cid: int
+                Integer representing ClientID
+            net: PyTorch NN
+                A PyTorch NN to be used for training with this client.
+            trainloader: DataLoader
+                DataLoader object to use while training model.
+            testloader: DataLoader
+                DataLoader object to use while training model.
+            optimizer: PyTorch Optimizer
+                Optimizer to use while updating model parameters. (e.g. Adam)
+        """
+        super(FlowerClient,self).__init__()
+        # client id
+        self.cid = cid
+        # client network
+        self.net = net
+        # train loader and iterator
+        self.trainloader = trainloader
+        self.trainiter = iter(trainloader)
+        # test loader and iterator
+        self.test_loader = testloader 
+        self.testiter = iter(self.test_loader)
+
+        # optimizer (
+        self.optimizer = optimizer
+        # outputs from previous round
+        self.outputs = None
+
+        self.myorder = None
+        
+    # Gets model parameters
     def get_parameters(self, config):
-        return [val.cpu().numpy() for _, val in net.state_dict().items()]
-
-    def set_parameters(self, parameters):
-        params_dict = zip(net.state_dict().keys(), parameters)
-        state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
-        net.load_state_dict(state_dict, strict=True)
-
-    def fit(self, parameters, config, **kwargs):
-        self.set_parameters(parameters)
-        train(net, X_train_tensor, Y_train_tensor, num_epochs=1)
-        return self.get_parameters(None), len(X_train_tensor), {}
-
-    def evaluate(self, parameters, config, **kwargs):
-        self.set_parameters(parameters)
-        loss, accuracy = test(net, X_test_tensor, Y_test_tensor)
-        return loss.item(), len(X_test_tensor), {"accuracy": accuracy.item()}
+        return [
+            val.cpu.numpy() for _,val in self.net.state_dict().items()
+        ]
 
 
-'''
-3. 위에서 구현한 FlowerClient 클래스를 사용하여 시작
-'''
-fl.client.start_numpy_client(
-    server_address="127.0.0.1:8080",
-    client=FlowerClient(),
-)
+    def fit(self,parameters,config):
+        """
+        Completes forward pass of one batch.
+
+        Args:
+            parameters: Parameters
+                Parameters of global model. ***Not needed in VFL***
+            config: dict
+                Configuration dictionary provided by server that contains
+                configuration information like current round.
+
+        Returns:
+            Tuple
+                Returns embeddings of train batch to server and dummy metrics
+        """
+        if self.myorder is None and 'order' in config:
+            self.myorder = config['order']
+        # Read values from config
+        server_round = config['server_round']
+        # get batch
+        try:
+            X = next(self.trainiter)
+        except StopIteration:
+            self.trainiter = iter(self.trainloader)
+            X = next(self.trainiter)
+        outputs = self.net(X.float())
+        self.outputs = outputs
+        
+        return [x for x in outputs.detach().numpy()], 1, {}
+
+    def evaluate(self, parameters, config):
+        """
+        Update model parameters and complete forward pass of one batch
+        of test data.
+
+        Args:
+            parameters: Parameters
+                Parameters of global model. ***Not needed in VFL***
+            config: dict
+                Configuration dictionary provided by server that contains
+                configuration information like current round
+        Returns:
+            Tuple
+                Returns embeddings of test batch in metrics dictionary.
+        """
+        self.outputs.backward(torch.tensor(np.array(parameters)))
+        self.optimizer.step()
+        try:
+            X = next(self.testiter)
+        except StopIteration:
+            self.testiter = iter(self.test_loader)
+            X = next(self.testiter)
+        with torch.no_grad():
+            outputs = self.net(X.float()).numpy()
+        bytes_outputs = pi.dumps([ x for x in outputs])
+        return 0., 0, {'test_embeddings': bytes_outputs}
+    
+    # get model
+    def get_model(self):
+        return self.net.state_dict()
+
+    def get_order(self):
+        return self.myorder
+    
+if __name__ == "__main__":
+    import argparse
+    import pickle
+    from utils import ShoppersDataset, ClientIdentifier
+    import model
+    from torch.optim import Adam
+
+    # set seed for consitency
+    torch.manual_seed(0)
+    
+    # accept client id arguement from cmd line
+    parser = argparse.ArgumentParser()
+    parser.add_argument("cid",type=int)
+    parser.add_argument("-d","--datafile",type=str)
+    args = parser.parse_args()
+
+    infile = './exports/hbs_result.pt'
+    cid    = args.cid
+
+    # cid maps to one of 'brand','company','category'
+    ci = ClientIdentifier()
+    client_type = ci.get_client_from_cid(cid=cid)
+
+    # obtain training data from file saved by server
+    with open(infile,'rb') as f:
+        data = pickle.load(f)
+    
+    # Get train and test dataloader objects
+    train_dataloader = data['data'][client_type]['train']
+    test_dataloader  = data['data'][client_type]['test']
+
+    # load client's model defintion
+    client_dict = None
+    with open("model_definitions.json",'r') as f:
+        client_dict = json.load(f)[client_type]
+    
+
+    # learning rate
+    lr     = client_dict['lr']
+    output_dim = client_dict['output_dim']
+    num_hidden_layers = client_dict['hidden']
+    input_dim = client_dict['input_dim']
+
+   
+    # # fix model with size 6 output dimensions
+    hidden_layer_dim = (input_dim + output_dim) // 2
+    layers = [input_dim] + [hidden_layer_dim for i in range(num_hidden_layers)] + [output_dim]
+    model = model.Net(layers)
+
+    Client = FlowerClient(
+        cid=str(args.cid), 
+        net = model, 
+        trainloader=train_dataloader, 
+        testloader=test_dataloader, 
+        optimizer = Adam(
+            params=model.parameters(), 
+            lr=lr
+        )
+    )
+
+    # # start client and connect to server
+    fl.client.start_numpy_client(
+        server_address="127.0.0.1:8080",
+        client=Client
+    )
+
+    # Get model's state dict and save for testing purposes after training. 
+    client_model = Client.get_model()
+    torch.save(client_model,f'./models/model_{args.cid}.pt')
+
+    info = {
+        'cid': args.cid,
+        'order': Client.get_order(),
+        'hps': {
+            'output_dim': output_dim,
+            'lr': lr,
+            'output_activation': 'sig',
+            'optim_type': 'adam'
+        }
+    }
+    with open(f"./models/model_{args.cid}_info.pt",'wb') as f:
+        pi.dump(info, f)
+    

@@ -1,0 +1,37 @@
+{
+    "company": {
+        "lr": 10,
+        "hidden": 2,
+        "output_dim": 3,
+        "input_dim": 74,
+        "optimizer": "adam"
+    },
+    "brand": {
+        "lr": 10,
+        "hidden": 2,
+        "output_dim": 3,
+        "input_dim": 14141,
+        "optimizer": "adam"
+    },
+    "category": {
+        "lr": 10,
+        "hidden": 2,
+        "output_dim": 3,
+        "input_dim": 22788,
+        "optimizer": "adam"
+    },
+    "global": {
+        "lr": 1e-09,
+        "hidden": 3,
+        "output_dim": 2,
+        "optimizer": "adam",
+        "num_rounds": 10,
+        "batch_size": 64,
+        "scheduler": {
+            "type": "OnPlateau",
+            "mode": "max",
+            "metric": "accuracy",
+            "on": "train"
+        }
+    }
+}
