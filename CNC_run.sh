@@ -6,7 +6,7 @@ echo "Starting server"
 python CNC_server.py &
 sleep 3  # Sleep for 3s to give the server enough time to start
 
-for i in `seq 0 1`; do
+for i in `seq 0 1 2`; do
     echo "Starting client $i"
     python CNC_client.py $i &
 done
