@@ -1,16 +1,17 @@
-[build-system]
-requires = ["poetry-core>=1.4.0"]
-build-backend = "poetry.core.masonry.api"
-
 [tool.poetry]
-name = "quickstart_pytorch"
+name = "jax_example"
 version = "0.1.0"
-description = "PyTorch Federated Learning Quickstart with Flower"
+description = "JAX example training a linear regression model with federated learning"
 authors = ["The Flower Authors <hello@flower.dev>"]
 
 [tool.poetry.dependencies]
-python = "^3.7"
+python = "^3.8"
 flwr = "^1.0.0"
-torch = "^1.12.0"
-torchvision = "^0.13.0"
-tqdm = "^4.63.0"
+jax = "^0.4.0"
+jaxlib = "^0.4.0"
+scikit-learn = "^1.1.1"
+numpy = "^1.21.4"
+
+[build-system]
+requires = ["poetry-core>=1.4.0"]
+build-backend = "poetry.core.masonry.api"
