@@ -27,7 +27,7 @@ import os
 import pandas as pd 
 from datetime import date 
 from sklearn.preprocessing import MinMaxScaler
-
+from torch.autograd import Variable
 
 
 # #############################################################################
@@ -127,12 +127,14 @@ def test(net, testloader):
     """Validate the model on the test set."""
     criterion = torch.nn.MSELoss()
     # correct, loss = 0, 0.0
-    loss = 0.0
+    loss, total = 0.0, 0.0
     with torch.no_grad():
         for features, labels in tqdm(testloader):
-            outputs = net(features)
-            labels = labels
-            loss += criterion(outputs, labels).item()
+            outputs = net(features.to(DEVICE))
+            labels = labels.to(DEVICE)
+            loss += criterion(outputs, labels).item() * len(labels)
+            total += len(labels)
+    loss /= total
             # correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
     # accuracy = correct / len(testloader.dataset)
     return loss
@@ -204,10 +206,12 @@ def load_data():
     y_train = y[:data_length] # 전체 데이터 중에서 80%만큼 앞의 데이터 저장
     X_test = X[data_length:] # 전체 데이터 중에서 20%만큼 뒤의 데이터 저장
     y_test = y[data_length:] # 전체 데이터 중에서 20%만큼 뒤의 데이터 저장    
-    
-    scaler = MinMaxScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
+
+    # scaler = MinMaxScaler()
+    # X_train = scaler.fit_transform(X_train)
+    # X_test = scaler.transform(X_test)
+    # X_train = Variable(torch.Tensor(X_train))
+    # X_test = Variable(torch.Tensor(X_test))
     
     datasets = []
     trainloaders = []
@@ -216,8 +220,10 @@ def load_data():
     BATCH_SIZE = 128
 
     X_test = torch.Tensor(np.array(X_test))
+    # print(X_test)
     y_test = np.array(y_test)
     testset = reachdataset(X_test, y_test)
+    # print(testset)
 
     for i in range(3):
         X_cid = X_train[X_train['Store Number'] == i].loc[:, 'Sales amount':]
@@ -249,7 +255,7 @@ if __name__ == "__main__":
     output_dim = 1
     learning_rate = 0.001
     epochs = 200
-    batch_size = 128
+    batch_size = 64
     
     
     net = LSTM(data_dim, hidden_dim, seq_length, output_dim, 1).to(DEVICE)
