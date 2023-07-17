@@ -23,7 +23,7 @@ import model
 from sklearn.metrics import f1_score
 
 from torch import optim
-from torch.nn import BCELoss, CrossEntropyLoss
+from torch.nn import BCELoss
 import torch
 
 from pickle import dump,loads
@@ -36,7 +36,7 @@ def get_parameters(net) -> List[np.ndarray]:
 #1e-3 works best so far
 
 class SplitVFL(Strategy):
-    def __init__(self, num_clients, batch_size, dim_input, num_hidden_layers, num_classes, train_labels, test_labels, scheduler_specs, lr=1e-3):
+    def __init__(self, num_clients, batch_size, dim_input, num_hidden_layers, train_labels, test_labels, scheduler_specs, lr=1e-3):
         """
         Strategy that implements vertical learning via a SplitNN.
         
@@ -62,8 +62,7 @@ class SplitVFL(Strategy):
         self.dim_input = dim_input
         self.num_hidden_layers = num_hidden_layers
         self.lr = lr
-        self.num_classes = num_classes  # 클래스 수를 저장하는 변수 추가
-        self.criterion = CrossEntropyLoss()
+        self.criterion = BCELoss()
         
         # number of batches in test/train sets
         self.num_train_batches = len(train_labels)
@@ -108,7 +107,7 @@ class SplitVFL(Strategy):
     def __repr__(self) -> str:
         return "SplitVFL"
 
-    def get_labels(self,test=False):
+    def get_labels(self, test=False):
         """
         Get labels of train or test set.
         Args:
@@ -156,14 +155,13 @@ class SplitVFL(Strategy):
         ) -> Optional[Parameters]:
         # Initialize global model parameters
         hidden_layer_dim = (self.dim_input + 1) // 2
-        # layer_sizes = [self.dim_input] + [hidden_layer_dim for i in range(self.num_hidden_layers)] + [1]
-        layer_sizes = [self.dim_input] + [hidden_layer_dim for _ in range(self.num_hidden_layers)] + [self.num_classes]  # 출력 뉴런 개수를 클래스 수로 변경
+        layer_sizes = [self.dim_input] + [hidden_layer_dim for i in range(self.num_hidden_layers)] + [1]
         global_model = model.Net(sizes=layer_sizes)
         ndarrays = get_parameters(net=global_model)
 
         self.model = global_model
         self.optim = optim.Adam(self.model.parameters(),lr=self.lr)
-        self.criterion = CrossEntropyLoss()
+        self.criterion = BCELoss()
 
         scheduler_type = self.scheduler_specs['type']
         if scheduler_type == "OnPlateau":
@@ -181,6 +179,7 @@ class SplitVFL(Strategy):
         """
         Configure clients for training. 
         """
+        
         rval = []
 
         for i, client in enumerate(clients):
@@ -188,7 +187,7 @@ class SplitVFL(Strategy):
                 self.order_clients[client.cid] = i
             config = { 'server_round': server_round, 'order': i}
             fit_ins = FitIns(parameters, config)
-            rval.append((client,fit_ins))
+            rval.append((client, fit_ins))
         # return list of tuples of client and fit instructions
         # fit instructions are just global model parameters and config.
         return rval
@@ -242,7 +241,7 @@ class SplitVFL(Strategy):
         # ]
         # create global model input --> size = batch_size x self.dim_input
 
-        gbl_model_input = torch.cat(client_tensors,1)
+        gbl_model_input = torch.cat(client_tensors, 1)
 
         if not test:
             self.client_tensors = client_tensors
@@ -275,35 +274,28 @@ class SplitVFL(Strategy):
         gbl_model_input = self.__convert_results_to_tensor(results=results)
         gbl_model_output = self.model(gbl_model_input)
 
-        # # get labels
-        # labels = self.get_labels(test=False).float()
-        # get labels (다중 분류의 경우 one-hot 벡터 형태로 변환해야 함)
-        labels = self.get_labels(test=False)
-        labels = torch.nn.functional.one_hot(labels.long(), self.num_classes).float()  # one-hot 벡터로 변환
-        
+        # get labels
+        labels = self.get_labels(test=False).float()
         # zero gradients
         self.optim.zero_grad()
-        # compute loss (다중 분류의 경우 CrossEntropyLoss 사용)
-        loss = self.criterion(gbl_model_output.float(), labels.argmax(dim=1).float())
         # compute loss
-        # loss = self.criterion(
-        #     gbl_model_output,
-        #     labels
-        # )
+        loss = self.criterion(
+            gbl_model_output,
+            labels
+        )
         # backpropagation and update
         loss.backward()
         self.optim.step()
         
         # get predictions
-        preds = torch.argmax(gbl_model_output, dim=1)
-        labels = self.get_labels(test=False)
+        preds = torch.round(gbl_model_output)
         # number of correct preds in batch
         num_correct = (
                 preds == labels
             ).float().sum().squeeze().item()
 
         self.train_correct += num_correct
-        f1 = f1_score(labels.numpy(), preds.detach().numpy(), average='micro')
+        f1 = f1_score(labels.numpy(), preds.detach().numpy())
         self.train_f1_accum += f1
         
         return (ndarrays_to_parameters(
@@ -339,7 +331,7 @@ class SplitVFL(Strategy):
                 config
             )
             eval_ins.append(ins)
-        return [(client,eins) for (client,eins) in zip(clients,eval_ins)]
+        return [(client, eins) for (client,eins) in zip(clients, eval_ins)]
 
     def aggregate_evaluate(
         self,
@@ -350,38 +342,31 @@ class SplitVFL(Strategy):
         """
         Compute model performance metrics on test set. 
         """
-        criterion = CrossEntropyLoss()
+        criterion = BCELoss()
         # convert client inputs to global model input
         gbl_model_input = self.__convert_results_to_tensor(results,test=True)
         
         with torch.no_grad():
             # compute model output and get metrics
             gbl_model_output = self.model(gbl_model_input).float()
-            # labels = self.get_labels(test=True).float()
-            labels = self.get_labels(test=False)
-            labels = torch.nn.functional.one_hot(labels.long(), self.num_classes).float()  # one-hot 벡터로 변환
-
-            # compute loss (다중 분류의 경우 CrossEntropyLoss 사용)
-            loss = criterion(gbl_model_output.float(), labels.argmax(dim=1).float())
-            # loss = criterion(
-            #     gbl_model_output,
-            #     labels
-            # )
+            labels = self.get_labels(test=True).float()
+            loss = criterion(
+                gbl_model_output,
+                labels
+            )
             # obtain predictions
-            preds = torch.argmax(gbl_model_output, dim=1)
-            labels = self.get_labels(test=False)
-
+            preds = torch.round(gbl_model_output)
             # number correct preds in current batch
             num_correct = (
                 preds == labels
             ).float().sum().squeeze().item()
             # compute f1
-            f1 = f1_score(labels.numpy(), preds.numpy(), average='mirco')
+            f1 = f1_score(labels.numpy(), preds.numpy())
 
             self.test_f1_accum += f1
             self.test_correct += num_correct
         # return dummy evaluation dictionaru
-        return (server_round, {None: str(None)})
+        return (server_round, {'None': str(None)})
 
     
     def evaluate(

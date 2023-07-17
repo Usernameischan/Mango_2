@@ -1,5 +1,5 @@
 import pandas as pd 
-from utils import ShoppersDataset,ClientIdentifier
+from utils import ShoppersDataset, ClientIdentifier
 from torch.utils.data import DataLoader
 from model import Net
 import torch
@@ -7,7 +7,7 @@ from pickle import load
 import json
 import argparse
 
-def get_trained_model(client_type,ci,global_dim=None):
+def get_trained_model(client_type, ci, global_dim=None):
     # load model definitions file 
     mdl_def = None
     with open('./model_definitions.json','r') as f:
@@ -48,10 +48,11 @@ if __name__ == "__main__":
     bs         = mdl_definitions['global']['batch_size']
     scheduler_specs = mdl_definitions['global']['scheduler']
     # get test data
-    test_data = pd.read_csv("../change_data/tmp_test_data.csv")
+    test_data = pd.read_csv("./data/tmp_test_data.csv", index_col=0)
+    test_data = test_data.drop(['repeater', 'date', 'productmeasure'], axis=1)
 
     comp_cols, brand_cols, cat_cols = [],[],[]
-    for i,col in enumerate(test_data.columns):
+    for num, col in enumerate(test_data.columns):
         if 'brand' in col: 
             brand_cols.append(col)
         elif 'cat' in col:
@@ -99,12 +100,12 @@ if __name__ == "__main__":
 
     
     company_model = get_trained_model(client_type='company', ci=ci)
-    brand_model =  get_trained_model(client_type='brand',ci=ci)
+    brand_model =  get_trained_model(client_type='brand', ci=ci)
     category_model = get_trained_model(client_type='category', ci=ci)
 
-    global_model = get_trained_model(client_type='global', ci=ci,global_dim=dim)
+    global_model = get_trained_model(client_type='global', ci=ci, global_dim=dim)
 
-    client_order = get_client_order([company_cid,brand_cid,category_cid])
+    client_order = get_client_order([company_cid, brand_cid, category_cid])
 
     with torch.no_grad():
         company_outputs = company_model(next(iter(company_dl)).float())
@@ -123,8 +124,8 @@ if __name__ == "__main__":
 
         preds = gbl_model_outputs.numpy()
     
-    
-    ids = pd.read_csv("../data/testHistory.csv").id 
+    print(len(preds))
+    ids = pd.read_csv("./data/testHistory.csv").id 
     df = pd.DataFrame(data={"id": ids, "repeatProbability": preds.squeeze()})
     
     keys = sorted(company_model_hps.keys())

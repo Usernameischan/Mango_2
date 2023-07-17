@@ -2,7 +2,6 @@
 set -e
 cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"/
 
-source venv/bin/activate
 
 BATCH_SIZE=32
 NUM_CLIENTS=3
@@ -32,3 +31,4 @@ wait
 python3 compute_test_metrics.py -n $NUM_CLIENTS -d $DATA_OUTPUT
 
 python3 generate_test_probabilities.py -s "onplateu-max-f1"
+

@@ -1,29 +1,29 @@
 {
     "company": {
-        "lr": 10,
+        "lr": 0.001,
         "hidden": 2,
-        "output_dim": 3,
-        "input_dim": 74,
+        "output_dim": 5,
+        "input_dim": 4,
         "optimizer": "adam"
     },
     "brand": {
-        "lr": 10,
+        "lr": 0.001,
         "hidden": 2,
-        "output_dim": 3,
-        "input_dim": 14141,
+        "output_dim": 5,
+        "input_dim": 2,
         "optimizer": "adam"
     },
     "category": {
-        "lr": 10,
+        "lr": 0.001,
         "hidden": 2,
-        "output_dim": 3,
-        "input_dim": 22788,
+        "output_dim": 5,
+        "input_dim": 2,
         "optimizer": "adam"
     },
     "global": {
-        "lr": 1e-09,
+        "lr": 0.001,
         "hidden": 3,
-        "output_dim": 2,
+        "output_dim": 1,
         "optimizer": "adam",
         "num_rounds": 10,
         "batch_size": 64,

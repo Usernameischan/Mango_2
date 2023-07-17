@@ -14,7 +14,7 @@ import time
 
 
 class FlowerClient(fl.client.NumPyClient):
-    def __init__(self, cid, net, trainloader, testloader, optimizer):
+    def __init__(self,cid, net, trainloader,testloader, optimizer):
         """
         Class that represents a client in Flower.
 
@@ -136,7 +136,7 @@ if __name__ == "__main__":
     parser.add_argument("-d","--datafile",type=str)
     args = parser.parse_args()
 
-    infile = './exports/hbs_result.pt'
+    infile = './change_data_tmp.pt'
     cid    = args.cid
 
     # cid maps to one of 'brand','company','category'
@@ -163,7 +163,7 @@ if __name__ == "__main__":
     num_hidden_layers = client_dict['hidden']
     input_dim = client_dict['input_dim']
 
-   
+    
     # # fix model with size 6 output dimensions
     hidden_layer_dim = (input_dim + output_dim) // 2
     layers = [input_dim] + [hidden_layer_dim for i in range(num_hidden_layers)] + [output_dim]
@@ -188,7 +188,7 @@ if __name__ == "__main__":
 
     # Get model's state dict and save for testing purposes after training. 
     client_model = Client.get_model()
-    torch.save(client_model,f'./models/model_{args.cid}.pt')
+    torch.save(client_model, f'./models/model_{args.cid}.pt')
 
     info = {
         'cid': args.cid,
@@ -203,3 +203,4 @@ if __name__ == "__main__":
     with open(f"./models/model_{args.cid}_info.pt",'wb') as f:
         pi.dump(info, f)
     
+

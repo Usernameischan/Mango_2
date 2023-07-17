@@ -11,9 +11,6 @@ import flwr as fl
 import argparse
 import json
 
-
-
-
 if __name__ == "__main__":
     # parser = argparse.ArgumentParser()
 
@@ -23,15 +20,10 @@ if __name__ == "__main__":
     # parser.add_argument("-nr","--numrounds",type=int)
     # parser.add_argument("-f","--trainfile",type=str)
     
-    
     # args = parser.parse_args()
-    # NUM_CLIENTS = args.numclients
-    # outfile = args.dataoutput
-    # infile = args.trainfile
-    
     NUM_CLIENTS = 3
-    outfile = './exports/hbs_result.pt'
-    infile = './data/hbs_dataset.zip'
+    outfile = './change_data_tmp.pt'
+    infile = './data/tmp_train_data.csv'
     
     with open('model_definitions.json','r') as f:
         model_definitions = json.load(f)
@@ -41,7 +33,7 @@ if __name__ == "__main__":
     BATCH_SIZE = model_definitions['global']['batch_size']
 
     # get data and save
-    DATA = save_data(data_path=infile, batch_size=BATCH_SIZE,outfile=outfile)
+    DATA = save_data(data_path=infile, batch_size=BATCH_SIZE, outfile=outfile)
 
 
     lr = model_definitions['global']['lr']
@@ -54,14 +46,13 @@ if __name__ == "__main__":
     
     # create strategy
     CustomStrategy = stgy.SplitVFL(
-        num_clients=NUM_CLIENTS, 
-        batch_size=BATCH_SIZE, 
-        dim_input= input_dim, # 6 outputs for three clients
-        num_classes=3, # 추가
-        num_hidden_layers=model_definitions['global']['hidden'],
+        num_clients = NUM_CLIENTS, 
+        batch_size = BATCH_SIZE, 
+        dim_input = input_dim, # 6 outputs for three clients
+        num_hidden_layers = model_definitions['global']['hidden'],
         train_labels = DATA['train_labels'],
-        test_labels=DATA['test_labels'],
-        scheduler_specs=scheduler_specs
+        test_labels = DATA['test_labels'],
+        scheduler_specs = scheduler_specs
     )
     # start server
     fl.server.start_server(
@@ -71,20 +62,18 @@ if __name__ == "__main__":
         ),
         strategy = CustomStrategy
     )
-    
-    
 
     # get and save global model for testing purposes.
     global_model = CustomStrategy.get_model()
     save(global_model, "./models/global_model.pt")
     
-    import matplotlib.pyplot as plt 
+    # import matplotlib.pyplot as plt 
 
-    fig, axs = plt.subplots(1,2,sharey=True)
+    # fig, axs = plt.subplots(1, 2, sharey=True)
     
-    axs[0].plot(CustomStrategy.train_acc,label='Train Accuracy')
-    axs[1].plot(CustomStrategy.test_acc, label='Test Accuracy')
-    axs[1].plot(CustomStrategy.test_f1,label='Test F1-Score')
-    axs[0].legend()
-    axs[1].legend()
-    plt.show()
+    # axs[0].plot(CustomStrategy.train_acc, label='Train Accuracy')
+    # axs[1].plot(CustomStrategy.test_acc, label='Test Accuracy')
+    # axs[1].plot(CustomStrategy.test_f1, label='Test F1-Score')
+    # axs[0].legend()
+    # axs[1].legend()
+    # plt.show()

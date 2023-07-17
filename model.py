@@ -15,21 +15,16 @@ class Net(nn.Module):
         self.layers = nn.ModuleList([
             nn.Linear(in_features, out_features) for in_features, out_features in zip(sizes, sizes[1:])
         ])
-        s = [(in_features, out_features) for in_features, out_features in zip(sizes, sizes[1:])]
-        print('in, out:', s)
-        # self.activation = nn.ReLU()
-        # self.output_layer = nn.Linear(sizes[-1], sizes[-1])
-        
-    def forward(self,x):
-        for i,layer in enumerate(self.layers):
+        # print(sizes, '\n', sizes[1:])
+        # for in_features, out_features in zip(sizes, sizes[1:]):
+        #     print(in_features, out_features)
+    
+    def forward(self, x):
+        for num, layer in enumerate(self.layers):
             # sigmoid only if output layers
-            fn = F.relu
+            fn = F.relu if num < (len(self.layers)-1) else sigmoid
             x = fn(layer(x))
         return x
 
-    # def forward(self, x):
-    #     for i, layer in enumerate(self.layers):
-    #         x = F.relu(layer(x))
-    #     x = self.output_layer(x)
-    #     return x
+
 

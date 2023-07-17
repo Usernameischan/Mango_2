@@ -5,11 +5,7 @@ import pandas as pd
 import numpy as np 
 from pickle import dump
 import json
-from io import BytesIO
-import os 
-import zipfile
-from zipfile import ZipFile
-import requests
+
 
 class ShoppersDataset(Dataset):
     """
@@ -29,7 +25,7 @@ class ShoppersDataset(Dataset):
     def __getitem__(self, index):
         return self.X[index,:]
 
-def create_train_test(df, train_index, test_index, batch_size, cols=None):
+def create_train_test(df, cols, train_index, test_index, batch_size):
     """
     Create train and test DataLoader objects using specified parameters.
 
@@ -51,28 +47,17 @@ def create_train_test(df, train_index, test_index, batch_size, cols=None):
     """
     torch.manual_seed(seed=0)
     
-    if cols != None:
-        train_ds = ShoppersDataset(
-            df.loc[train_index][cols].copy().to_numpy()
-        )
-        test_ds = ShoppersDataset(
-            df.loc[test_index][cols].copy().to_numpy()
-        )
-        train_dl = DataLoader(dataset=train_ds, batch_size=batch_size, shuffle=False)
-        test_dl = DataLoader(dataset=test_ds, batch_size=batch_size, shuffle=False)
-        return train_dl,test_dl
-    else:
-        train_ds = ShoppersDataset(
-            df.loc[train_index].copy().to_numpy()
-        )
-        test_ds = ShoppersDataset(
-            df.loc[test_index].copy().to_numpy()
-        )
-        train_dl = DataLoader(dataset=train_ds, batch_size=batch_size, shuffle=False)
-        test_dl = DataLoader(dataset=test_ds, batch_size=batch_size, shuffle=False)
-        return train_dl,test_dl
+    train_ds = ShoppersDataset(
+        df.loc[train_index][cols].copy().to_numpy()
+    )
+    test_ds = ShoppersDataset(
+        df.loc[test_index][cols].copy().to_numpy()
+    )
+    train_dl = DataLoader(dataset=train_ds, batch_size=batch_size, shuffle=False)
+    test_dl = DataLoader(dataset=test_ds, batch_size=batch_size, shuffle=False)
+    return train_dl, test_dl
 
-def load_datasets(data_path,batch_size):
+def load_datasets(data_path, batch_size):
     """
     Creates vertically-split datasets to use for vertical federated learning.
 
@@ -87,79 +72,35 @@ def load_datasets(data_path,batch_size):
             A dictionary that contains the vertically-split datasets for use in federated learning along 
             with associated train/test labels. 
     """
-    # df = pd.read_csv(data_path) ############################# 바꾸기 data_path = zip file0
-    data_filename = []
-    data=[] 
-    with ZipFile(data_path, 'r') as zipObj:
-        listOfFileNames = zipObj.namelist()
-        for fileName in listOfFileNames:
-            if fileName.endswith('csv'): 
-                # print(fileName)
-                zipRead = zipObj.read(fileName)
-                curr_df = pd.read_csv(BytesIO(zipRead))
-                data.append(curr_df)
-                data_filename.append(fileName)
-
-    # for filename, d in zip(data_filename, data): 
-    #     print(filename)
-    #     display(d.head(5))
-    
-    # Label Encoding
-    target_code = {'RRR':0,'GGG':1,'BBB':2}
-    data[0]['target'] = data[0]['target'].map(target_code)
-    
-    # 하위 절반 행 삭제(메모리 이슈로 인해, 모델 정상작동 확인 후 제거할 것.)
-    data[0] = data[0].iloc[len(data[0])//2:, :]
-    data[1] = data[1].iloc[len(data[1])//2:, :]
-    data[2] = data[2].iloc[len(data[2])//2:, :]
-    
-    data[0] = data[0].iloc[:, len(data[0].columns)//2:]
-    data[1] = data[1].iloc[:, len(data[1].columns)//2:]
-    data[2] = data[2].iloc[:, len(data[2].columns)//2:]
-    
-    train_index, test_index = train_test_split(data[0].index.values,test_size=0.2,stratify=data[0]['target'])
+    df = pd.read_csv(data_path, index_col=0)
+    # Get train/test indices
+    train_index, test_index = train_test_split(df.index.values, test_size=0.1, shuffle=False)
+    # print(train_index, test_index)
+    # treating labels as dataloaders --> simplifies VFL training.
+    # get labels
     train_labels, test_labels = create_train_test(
-        df=data[0], train_index=train_index, test_index=test_index, batch_size=batch_size, cols=['target']
+        df=df, cols=['repeater'], train_index=train_index, test_index=test_index, batch_size=batch_size
     )
-    data[0].drop('target', axis=1, inplace=True)
-    data[1].drop('target', axis=1, inplace=True)
-    data[2].drop('target', axis=1, inplace=True)
+    # drop repeater column (clients don't have labels)
+    df = df.drop(['repeater', 'date', 'productmeasure'], axis=1)
 
-
-
-
-
-    train_comp_dl, test_comp_dl = create_train_test(data[0].iloc[:,1:], train_index=train_index, test_index=test_index, batch_size=batch_size)
-    train_cat_dl, test_cat_dl = create_train_test(data[1].iloc[:,1:], train_index=train_index, test_index=test_index, batch_size=batch_size)
-    train_brand_dl, test_brand_dl = create_train_test(data[2].iloc[:,1:], train_index=train_index, test_index=test_index, batch_size=batch_size)
-
-
-    # # Get train/test indices
-    # train_index, test_index = train_test_split(df.index.values,test_size=0.2,)
-    # # treating labels as dataloaders --> simplifies VFL training.
-    # # get labels
-    # train_labels, test_labels = create_train_test(
-    #     df=df, cols=['target'], train_index=train_index, test_index=test_index, batch_size=batch_size
-    # )
-    # # drop repeater column (clients don't have labels)
-    # df = df.drop('target',axis=1)
-
-    # # Split's data into three types of clients: brand-,category-, and company-based.
-    # comp_cols, brand_cols, cat_cols = [],[],[]
-    # for i,col in enumerate(df.columns):
-    #     if 'brand' in col: 
-    #         brand_cols.append(col)
-    #     elif 'cat' in col:
-    #         cat_cols.append(col)
-    #     elif 'comp' in col:
-    #         comp_cols.append(col)
-    #     else:
-    #         comp_cols.append(col)
+    # Split's data into three types of clients: brand-,category-, and company-based.
+    comp_cols, brand_cols, cat_cols = [],[],[]
+    for num, col in enumerate(df.columns):
+        if 'brand' in col: 
+            brand_cols.append(col)
+        elif 'cat' in col:
+            cat_cols.append(col)
+        elif 'comp' in col:
+            comp_cols.append(col)
+        else:
+            comp_cols.append(col)
+    print(brand_cols, '\n', cat_cols, '\n', comp_cols)
 
     # create dataloaders for each client
-    # train_comp_dl, test_comp_dl = create_train_test(df, cols=comp_cols,  train_index=train_index, test_index=test_index, batch_size=batch_size)
-    # train_cat_dl, test_cat_dl = create_train_test(df, cols=cat_cols,   train_index=train_index, test_index=test_index, batch_size=batch_size)
-    # train_brand_dl, test_brand_dl = create_train_test(df, cols=brand_cols, train_index=train_index, test_index=test_index, batch_size=batch_size)
+    train_comp_dl, test_comp_dl = create_train_test(df, cols=comp_cols, train_index=train_index, test_index=test_index, batch_size=batch_size)
+    train_cat_dl, test_cat_dl = create_train_test(df, cols=cat_cols, train_index=train_index, test_index=test_index, batch_size=batch_size)
+    train_brand_dl, test_brand_dl = create_train_test( df, cols=brand_cols, train_index=train_index, test_index=test_index, batch_size=batch_size)
 
     train_comp_shape = train_comp_dl.dataset.X.shape
     test_comp_shape = test_comp_dl.dataset.X.shape
@@ -204,7 +145,7 @@ def load_datasets(data_path,batch_size):
     }
     return rval 
 
-def save_data(data_path,batch_size,outfile):
+def save_data(data_path, batch_size, outfile):
     """
     Creates client datasets and saves to pickled file for future use.
 
