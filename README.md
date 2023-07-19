@@ -1,6 +1,54 @@
 # Federated Learning 
 ## Mango_2
 
+[Appendix]
+
+1. LSTM LF(~ing)
+- LSTM_client.py
+- LSTM_server.py
+
+2. Transformer FL(~ing)
+- main.py : client
+- trans_server.py : server
+- model.py
+- Dataloader.py
+- Preprocessing.py
+- train_teacher_forcing.py
+- train_with_sampling.py
+- inference.py
+- plot.py
+- helpers.py
+- scaler_item.joblib
+
+ref: https://medium.com/mlearning-ai/transformer-implementation-for-time-series-forecasting-a9db2db5c820
+ref: https://github.com/nklingen/Transformer-Time-Series-Forecasting
+
+
+3. Transformer FL2
+
+trans_server : server
+Transformer_client : client
+
+ref: https://github.com/oliverguhr/transformer-time-series-prediction/blob/master/transformer-singlestep.py
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ### 데이터 살펴보기
 - inventory.ipynb (reach_dataset)
 - adsfasf.ipynb (잡다한거)
