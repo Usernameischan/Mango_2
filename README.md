@@ -28,6 +28,11 @@
 trans_server가 server.
 main이 client.
 
+- save_predictions1에 있는 사진들이 중앙집중방식 (1 붙은 것들은 다 중앙집중 결과)
+- save_predictions에 있는 사진들은 연합학습임
+
+### pre 파일은 건들지 말 것.(중앙집중방식임)
+
 
 ### Transformer FL2(Fail)
 - ref: https://github.com/oliverguhr/transformer-time-series-prediction/blob/master/transformer-singlestep.py

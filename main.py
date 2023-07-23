@@ -32,8 +32,8 @@ def main(
     frequency: int = 100,
     training_length = 48,
     forecast_window = 24,
-    train_csv = r"train_dataset.csv",
-    test_csv = r"test_dataset.csv",
+    train_csv = r"train_reach_dataset.csv",
+    test_csv = r"test_reach_dataset.csv",
     path_to_save_model = r"save_model/",
     path_to_save_loss = r"save_loss/", 
     path_to_save_predictions = r"save_predictions/", 
@@ -92,7 +92,7 @@ def main(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cid", type=int, default=0)
-    parser.add_argument("--epoch", type=int, default=30)
+    parser.add_argument("--epoch", type=int, default=1000) ######################### 로컬 에폭 defalut=500, 1000, 2000으로 변경해가면서
     parser.add_argument("--k", type=int, default=60)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--frequency", type=int, default=100)

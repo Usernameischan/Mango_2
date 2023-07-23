@@ -14,11 +14,11 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s %(message)s", datefmt="[%Y-%m-%d %H:%M:%S]")
 logger = logging.getLogger(__name__)
 
-def transformer(dataloader, EPOCH, frequency, path_to_save_model, path_to_save_loss, path_to_save_predictions, device):
+def transformer(model, dataloader, EPOCH, frequency, path_to_save_model, path_to_save_loss, path_to_save_predictions, device):
 
-    device = torch.device(device)
+    # device = torch.device(device)
 
-    model = Transformer().double().to(device)
+    # model = Transformer().double().to(device)
     optimizer = torch.optim.Adam(model.parameters())
     # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=200)
     criterion = torch.nn.MSELoss()
